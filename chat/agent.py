@@ -41,7 +41,7 @@ from .tools.aws_resources import (
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """당신은 AWS 옵저버빌리티 플랫폼의 AI 어시스턴트입니다.
+SYSTEM_PROMPT = """당신은 LogTech의 AI 어시스턴트입니다.
 사용자의 질문에 따라 적절한 툴을 사용해 메트릭, 로그, 트레이스, 인프라 상태, 인시던트 이력을 조회하고 한국어로 답변합니다.
 
 ## 사용 가능한 데이터 소스
