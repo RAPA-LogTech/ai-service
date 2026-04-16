@@ -14,3 +14,8 @@ app.include_router(messages_router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/")
+def root():
+    return {"status": "ok"}
