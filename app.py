@@ -13,7 +13,14 @@ app.include_router(messages_router)
 
 @app.get("/health")
 def health():
+    """Lightweight health check for k8s probes"""
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def health_ready():
+    """Readiness check"""
+    return {"status": "ok", "service": "ai-service"}
 
 
 @app.get("/")
