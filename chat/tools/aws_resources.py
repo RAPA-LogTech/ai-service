@@ -33,7 +33,9 @@ from strands.models import BedrockModel
 try:
     from cw_logger import cw_log
 except Exception:
-    def cw_log(msg): pass
+
+    def cw_log(msg):
+        pass
 
 
 def _log(msg: str):
@@ -48,6 +50,7 @@ def _log(msg: str):
 # 해결하기 위해 원본 반환값을 별도로 저장하여 Writer에 직접 전달함
 # ============================================================
 import threading as _threading
+
 _raw_outputs: dict = {}
 _raw_outputs_lock = _threading.Lock()
 
@@ -68,17 +71,23 @@ def get_raw_outputs() -> dict:
 # 환경변수
 # ============================================================
 AMP_ENDPOINT = os.environ.get("AMP_ENDPOINT", "")
-print(f"[agents_aws] loaded, AMP_ENDPOINT={AMP_ENDPOINT[:40] if AMP_ENDPOINT else 'NOT SET'}")
-OS_ENDPOINT  = os.environ.get("OPENSEARCH_ENDPOINT", "")
-OS_USER      = os.environ.get("OPENSEARCH_USER", "admin")
-OS_PASSWORD  = os.environ.get("OPENSEARCH_PASSWORD", "")
-AWS_REGION   = os.environ.get("AWS_REGION_NAME", "ap-northeast-2")
+print(
+    f"[agents_aws] loaded, AMP_ENDPOINT={AMP_ENDPOINT[:40] if AMP_ENDPOINT else 'NOT SET'}"
+)
+OS_ENDPOINT = os.environ.get("OPENSEARCH_ENDPOINT", "")
+OS_USER = os.environ.get("OPENSEARCH_USER", "admin")
+OS_PASSWORD = os.environ.get("OPENSEARCH_PASSWORD", "")
+AWS_REGION = os.environ.get("AWS_REGION_NAME", "ap-northeast-2")
 
 # Athena 설정
-ATHENA_DB          = os.environ.get("ATHENA_DATABASE", "log_platform_dev_observability")
-ATHENA_OUTPUT      = os.environ.get("ATHENA_OUTPUT_BUCKET", "")  # s3://bucket/athena-results/
-LOGS_BUCKET        = os.environ.get("LOGS_BUCKET", "log-platform-dev-logs-backup-347751175815")
-TRACES_BUCKET      = os.environ.get("TRACES_BUCKET", "log-platform-dev-traces-backup-347751175815")
+ATHENA_DB = os.environ.get("ATHENA_DATABASE", "log_platform_dev_observability")
+ATHENA_OUTPUT = os.environ.get(
+    "ATHENA_OUTPUT_BUCKET", ""
+)  # s3://bucket/athena-results/
+LOGS_BUCKET = os.environ.get("LOGS_BUCKET", "log-platform-dev-logs-backup-347751175815")
+TRACES_BUCKET = os.environ.get(
+    "TRACES_BUCKET", "log-platform-dev-traces-backup-347751175815"
+)
 
 
 # ============================================================
@@ -183,6 +192,7 @@ def _amp_base_url() -> str:
 def _amp_signed_request(url: str) -> dict:
     from botocore.auth import SigV4Auth
     from botocore.awsrequest import AWSRequest
+
     session = boto3.Session()
     creds = session.get_credentials().get_frozen_credentials()
     aws_req = AWSRequest(method="GET", url=url)
@@ -198,8 +208,12 @@ def query_opensearch(index: str, query: dict) -> dict:
         url = f"https://{OS_ENDPOINT}/{index}/_search"
         payload = json.dumps(query).encode("utf-8")
         req = urllib.request.Request(
-            url, data=payload,
-            headers={"Content-Type": "application/json", "Authorization": f"Basic {creds}"},
+            url,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Basic {creds}",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -212,26 +226,49 @@ def query_opensearch(index: str, query: dict) -> dict:
 # ============================================================
 # boto3 클라이언트 팩토리
 # ============================================================
-def _cw():    return boto3.client("cloudwatch",  region_name=AWS_REGION)
-def _logs():  return boto3.client("logs",         region_name=AWS_REGION)
-def _rds():   return boto3.client("rds",          region_name=AWS_REGION)
-def _ec2():   return boto3.client("ec2",          region_name=AWS_REGION)
-def _elb():   return boto3.client("elbv2",        region_name=AWS_REGION)
-def _asg():   return boto3.client("autoscaling",  region_name=AWS_REGION)
-def _trail(): return boto3.client("cloudtrail",   region_name=AWS_REGION)
+def _cw():
+    return boto3.client("cloudwatch", region_name=AWS_REGION)
+
+
+def _logs():
+    return boto3.client("logs", region_name=AWS_REGION)
+
+
+def _rds():
+    return boto3.client("rds", region_name=AWS_REGION)
+
+
+def _ec2():
+    return boto3.client("ec2", region_name=AWS_REGION)
+
+
+def _elb():
+    return boto3.client("elbv2", region_name=AWS_REGION)
+
+
+def _asg():
+    return boto3.client("autoscaling", region_name=AWS_REGION)
+
+
+def _trail():
+    return boto3.client("cloudtrail", region_name=AWS_REGION)
 
 
 # ============================================================
 # AMP / OpenSearch 파라미터화 툴 (obs-agent 스타일)
 # ============================================================
 
+
 @tool
 def fetch_amp_metric(promql: str, last_minutes: int = 0) -> str:
-    """AMP(Amazon Managed Prometheus)에서 PromQL 쿼리로 메트릭 조회.
+    (
+        """AMP(Amazon Managed Prometheus)에서 PromQL 쿼리로 메트릭 조회.
     last_minutes=0이면 instant query(현재값), >0이면 range query(시계열).
     서비스 필터는 job 라벨 사용. 예: app_http_server_error_ratio_5m{job="todolist/springboot",deployment_environment="dev"}
     job 라벨은 반드시 전체값 사용 (job="todolist/springboot", job="todolist/thymeleaf", job="todolist/todoui-flask")
-    """ + AMP_SCHEMA
+    """
+        + AMP_SCHEMA
+    )
     try:
         q = urllib.parse.quote(promql, safe="")
         if last_minutes > 0:
@@ -266,8 +303,12 @@ def fetch_amp_metric(promql: str, last_minutes: int = 0) -> str:
                     "last_data_age_seconds": None,
                     "no_data": True,
                 }
-        preview = json.dumps(out.get("data", {}).get("result", [])[:2], ensure_ascii=False)[:300]
-        _log(f"[TOOL] fetch_amp_metric promql={promql!r} last_minutes={last_minutes} status={out.get('status','ok')} preview={preview}")
+        preview = json.dumps(
+            out.get("data", {}).get("result", [])[:2], ensure_ascii=False
+        )[:300]
+        _log(
+            f"[TOOL] fetch_amp_metric promql={promql!r} last_minutes={last_minutes} status={out.get('status', 'ok')} preview={preview}"
+        )
         return json.dumps(out, ensure_ascii=False)[:4000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -283,39 +324,62 @@ def fetch_logs(
     last_minutes: int = 10,
     size: int = 20,
 ) -> str:
-    """OpenSearch에서 로그 조회. index: logs-app(앱) 또는 logs-host(호스트).
+    (
+        """OpenSearch에서 로그 조회. index: logs-app(앱) 또는 logs-host(호스트).
     severity: ERROR(Java의 SEVERE 포함)/WARN/INFO.
     service = resource.service.name 값 (예: "springboot", "flask", "thymeleaf").
     environment = resource.deployment.environment 값 (예: "dev", "prod").
-    """ + LOGS_SCHEMA
+    """
+        + LOGS_SCHEMA
+    )
     try:
         now_ms = int(time.time() * 1000)
         from_ms = now_ms - last_minutes * 60 * 1000
         must_filters: list = [
-            {"range": {"@timestamp": {"gte": from_ms, "lte": now_ms, "format": "epoch_millis"}}},
+            {
+                "range": {
+                    "@timestamp": {
+                        "gte": from_ms,
+                        "lte": now_ms,
+                        "format": "epoch_millis",
+                    }
+                }
+            },
             {"term": {"resource.service.name.keyword": service}},
             {"term": {"resource.deployment.environment.keyword": environment}},
         ]
         if severity:
             sev_upper = severity.upper()
             if sev_upper == "ERROR":
-                must_filters.append({"bool": {"should": [
-                    {"term": {"severity.text.keyword": "ERROR"}},
-                    {"term": {"severity.text.keyword": "SEVERE"}},
-                ], "minimum_should_match": 1}})
+                must_filters.append(
+                    {
+                        "bool": {
+                            "should": [
+                                {"term": {"severity.text.keyword": "ERROR"}},
+                                {"term": {"severity.text.keyword": "SEVERE"}},
+                            ],
+                            "minimum_should_match": 1,
+                        }
+                    }
+                )
             else:
                 must_filters.append({"term": {"severity.text.keyword": sev_upper}})
         if filter_text:
             must_filters.append({"match": {"body": filter_text}})
         target_index = index if index in ("logs-app", "logs-host") else "logs-app"
-        resp = query_opensearch(target_index, {
-            "size": size,
-            "sort": [{"@timestamp": {"order": "desc"}}],
-            "query": {"bool": {"filter": must_filters}},
-        })
+        resp = query_opensearch(
+            target_index,
+            {
+                "size": size,
+                "sort": [{"@timestamp": {"order": "desc"}}],
+                "query": {"bool": {"filter": must_filters}},
+            },
+        )
         if "error" in resp:
             err_msg = f"OpenSearch 조회 실패: {resp['error']}"
-            _log(f"[TOOL] fetch_logs index={target_index} service={service} env={environment} -> ERROR: {resp['error']}")
+            _log(
+                f"[TOOL] fetch_logs index={target_index} service={service} env={environment} -> ERROR: {resp['error']}"
+            )
             return json.dumps({"status": "error", "message": err_msg})
         hits = resp.get("hits", {}).get("hits", [])
         latest_log_ts = hits[0]["_source"].get("@timestamp") if hits else None
@@ -325,10 +389,13 @@ def fetch_logs(
         if latest_log_ts:
             try:
                 import datetime as _dt
-                last_dt = _dt.datetime.strptime(latest_log_ts[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=_dt.timezone.utc)
+
+                last_dt = _dt.datetime.strptime(
+                    latest_log_ts[:19], "%Y-%m-%dT%H:%M:%S"
+                ).replace(tzinfo=_dt.timezone.utc)
                 age_sec = int((time.time() - last_dt.timestamp()))
                 if age_sec > 300:
-                    log_age_warning = f"경고: 마지막 로그가 {age_sec//60}분 {age_sec%60}초 전입니다. 서비스가 그 이후 로그를 생성하지 않음 = 서비스 다운 가능성 높음"
+                    log_age_warning = f"경고: 마지막 로그가 {age_sec // 60}분 {age_sec % 60}초 전입니다. 서비스가 그 이후 로그를 생성하지 않음 = 서비스 다운 가능성 높음"
             except Exception:
                 pass
         out = {
@@ -338,15 +405,21 @@ def fetch_logs(
             "current_time_utc": now_utc,
             "latest_log_timestamp": latest_log_ts,
             "log_age_warning": log_age_warning,
-            "samples": [{
-                "timestamp": h["_source"].get("@timestamp"),
-                "severity": (h["_source"].get("severity") or {}).get("text"),
-                "body": h["_source"].get("body"),
-                "traceId": h["_source"].get("traceId"),
-            } for h in hits],
+            "samples": [
+                {
+                    "timestamp": h["_source"].get("@timestamp"),
+                    "severity": (h["_source"].get("severity") or {}).get("text"),
+                    "body": h["_source"].get("body"),
+                    "traceId": h["_source"].get("traceId"),
+                }
+                for h in hits
+            ],
         }
         sample = hits[0]["_source"].get("body", "")[:100] if hits else ""
-        _log(f"[TOOL] fetch_logs index={target_index} service={service} env={environment} severity={severity or '(all)'} last_minutes={last_minutes} -> count={len(hits)}" + (f" sample={sample!r}" if sample else ""))
+        _log(
+            f"[TOOL] fetch_logs index={target_index} service={service} env={environment} severity={severity or '(all)'} last_minutes={last_minutes} -> count={len(hits)}"
+            + (f" sample={sample!r}" if sample else "")
+        )
         return json.dumps(out, ensure_ascii=False)[:4000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -359,46 +432,77 @@ def fetch_traces(
     status_filter: str = "",
     last_minutes: int = 10,
 ) -> str:
-    """OpenSearch traces-app에서 trace span 조회.
+    (
+        """OpenSearch traces-app에서 trace span 조회.
     status_filter=Error로 에러 span만 필터. 시간 필터는 startTime(ISO) 기준, @timestamp 사용 금지.
     service = resource.service.name 값 (예: "springboot").
-    """ + LOGS_SCHEMA
+    """
+        + LOGS_SCHEMA
+    )
     try:
         now_ms = int(time.time() * 1000)
         from_ms = now_ms - last_minutes * 60 * 1000
-        from_iso = datetime.fromtimestamp(from_ms / 1000.0, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        to_iso   = datetime.fromtimestamp(now_ms / 1000.0, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        from_iso = datetime.fromtimestamp(from_ms / 1000.0, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
+        to_iso = datetime.fromtimestamp(now_ms / 1000.0, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
         must_filters: list = [
-            {"range": {"startTime": {"gte": from_iso, "lte": to_iso, "format": "strict_date_optional_time"}}},
+            {
+                "range": {
+                    "startTime": {
+                        "gte": from_iso,
+                        "lte": to_iso,
+                        "format": "strict_date_optional_time",
+                    }
+                }
+            },
             {"term": {"resource.service.name.keyword": service}},
             {"term": {"resource.deployment.environment.keyword": environment}},
         ]
         if status_filter:
             must_filters.append({"term": {"status.code.keyword": status_filter}})
-        resp = query_opensearch("traces-app", {
-            "size": 30,
-            "sort": [{"startTime": {"order": "desc"}}],
-            "query": {"bool": {"filter": must_filters}},
-        })
+        resp = query_opensearch(
+            "traces-app",
+            {
+                "size": 30,
+                "sort": [{"startTime": {"order": "desc"}}],
+                "query": {"bool": {"filter": must_filters}},
+            },
+        )
         if "error" in resp:
-            _log(f"[TOOL] fetch_traces service={service} env={environment} -> ERROR: {resp['error']}")
-            return json.dumps({"status": "error", "message": f"OpenSearch 조회 실패: {resp['error']}"})
+            _log(
+                f"[TOOL] fetch_traces service={service} env={environment} -> ERROR: {resp['error']}"
+            )
+            return json.dumps(
+                {"status": "error", "message": f"OpenSearch 조회 실패: {resp['error']}"}
+            )
         hits = resp.get("hits", {}).get("hits", [])
         total_val = resp.get("hits", {}).get("total")
-        total_count = total_val.get("value", len(hits)) if isinstance(total_val, dict) else len(hits)
+        total_count = (
+            total_val.get("value", len(hits))
+            if isinstance(total_val, dict)
+            else len(hits)
+        )
         out = {
             "status": "success",
             "trace_count": total_count,
-            "recent_spans": [{
-                "startTime": h["_source"].get("startTime"),
-                "traceId": h["_source"].get("traceId"),
-                "name": h["_source"].get("name"),
-                "kind": h["_source"].get("kind"),
-                "status": h["_source"].get("status", {}),
-            } for h in hits[:15]],
+            "recent_spans": [
+                {
+                    "startTime": h["_source"].get("startTime"),
+                    "traceId": h["_source"].get("traceId"),
+                    "name": h["_source"].get("name"),
+                    "kind": h["_source"].get("kind"),
+                    "status": h["_source"].get("status", {}),
+                }
+                for h in hits[:15]
+            ],
         }
-        _log(f"[TOOL] fetch_traces service={service} env={environment} "
-              f"status_filter={status_filter!r} last_minutes={last_minutes} -> spans={len(hits)} total={total_count}")
+        _log(
+            f"[TOOL] fetch_traces service={service} env={environment} "
+            f"status_filter={status_filter!r} last_minutes={last_minutes} -> spans={len(hits)} total={total_count}"
+        )
         return json.dumps(out, ensure_ascii=False)[:4000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -407,6 +511,7 @@ def fetch_traces(
 # ============================================================
 # Infrastructure 툴 (obs-agent sub_agents.py 기반)
 # ============================================================
+
 
 @tool
 def fetch_cloudwatch_metric(
@@ -430,21 +535,40 @@ def fetch_cloudwatch_metric(
         end_time = time.time()
         start_time = end_time - last_minutes * 60
         resp = _cw().get_metric_statistics(
-            Namespace=namespace, MetricName=metric_name, Dimensions=dims,
-            StartTime=start_time, EndTime=end_time, Period=60, Statistics=[stat],
+            Namespace=namespace,
+            MetricName=metric_name,
+            Dimensions=dims,
+            StartTime=start_time,
+            EndTime=end_time,
+            Period=60,
+            Statistics=[stat],
         )
         datapoints = sorted(resp.get("Datapoints", []), key=lambda x: x["Timestamp"])
         result = {
             "status": "success",
-            "namespace": namespace, "metric_name": metric_name, "stat": stat,
-            "datapoints": [{"timestamp": str(d["Timestamp"]), "value": d.get(stat, d.get("Average", 0))} for d in datapoints[-10:]],
+            "namespace": namespace,
+            "metric_name": metric_name,
+            "stat": stat,
+            "datapoints": [
+                {
+                    "timestamp": str(d["Timestamp"]),
+                    "value": d.get(stat, d.get("Average", 0)),
+                }
+                for d in datapoints[-10:]
+            ],
             "summary": {
                 "count": len(datapoints),
-                "latest": datapoints[-1].get(stat, datapoints[-1].get("Average")) if datapoints else None,
-                "max": max((d.get(stat, d.get("Average", 0)) for d in datapoints), default=None),
+                "latest": datapoints[-1].get(stat, datapoints[-1].get("Average"))
+                if datapoints
+                else None,
+                "max": max(
+                    (d.get(stat, d.get("Average", 0)) for d in datapoints), default=None
+                ),
             },
         }
-        _log(f"[TOOL] fetch_cloudwatch_metric {namespace}/{metric_name} -> {len(datapoints)} points latest={result['summary']['latest']}")
+        _log(
+            f"[TOOL] fetch_cloudwatch_metric {namespace}/{metric_name} -> {len(datapoints)} points latest={result['summary']['latest']}"
+        )
         return json.dumps(result, ensure_ascii=False, default=str)[:3000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -463,14 +587,20 @@ def fetch_cloudwatch_alarms(state: str = "ALARM", name_prefix: str = "") -> str:
         resp = _cw().describe_alarms(**kwargs)
         alarms = resp.get("MetricAlarms", [])
         result = {
-            "status": "success", "state_filter": state, "count": len(alarms),
-            "alarms": [{
-                "name": a["AlarmName"], "state": a["StateValue"],
-                "reason": a.get("StateReason", ""),
-                "metric": f"{a.get('Namespace', '')}/{a.get('MetricName', '')}",
-                "threshold": a.get("Threshold"),
-                "state_updated": str(a.get("StateUpdatedTimestamp", "")),
-            } for a in alarms[:20]],
+            "status": "success",
+            "state_filter": state,
+            "count": len(alarms),
+            "alarms": [
+                {
+                    "name": a["AlarmName"],
+                    "state": a["StateValue"],
+                    "reason": a.get("StateReason", ""),
+                    "metric": f"{a.get('Namespace', '')}/{a.get('MetricName', '')}",
+                    "threshold": a.get("Threshold"),
+                    "state_updated": str(a.get("StateUpdatedTimestamp", "")),
+                }
+                for a in alarms[:20]
+            ],
         }
         _log(f"[TOOL] fetch_cloudwatch_alarms state={state} -> {len(alarms)} alarms")
         return json.dumps(result, ensure_ascii=False, default=str)[:3000]
@@ -496,29 +626,53 @@ def fetch_cloudwatch_logs(
         start_ms = end_ms - last_minutes * 60 * 1000
         if filter_pattern:
             resp = _logs().filter_log_events(
-                logGroupName=log_group, startTime=start_ms, endTime=end_ms,
-                limit=limit, filterPattern=filter_pattern,
+                logGroupName=log_group,
+                startTime=start_ms,
+                endTime=end_ms,
+                limit=limit,
+                filterPattern=filter_pattern,
             )
             events = resp.get("events", [])
         else:
-            streams = _logs().describe_log_streams(
-                logGroupName=log_group, orderBy="LastEventTime", descending=True, limit=3,
-            ).get("logStreams", [])
+            streams = (
+                _logs()
+                .describe_log_streams(
+                    logGroupName=log_group,
+                    orderBy="LastEventTime",
+                    descending=True,
+                    limit=3,
+                )
+                .get("logStreams", [])
+            )
             events = []
             for stream in streams:
                 e_resp = _logs().get_log_events(
-                    logGroupName=log_group, logStreamName=stream["logStreamName"],
-                    startTime=start_ms, endTime=end_ms, limit=limit // 3,
+                    logGroupName=log_group,
+                    logStreamName=stream["logStreamName"],
+                    startTime=start_ms,
+                    endTime=end_ms,
+                    limit=limit // 3,
                 )
                 events.extend(e_resp.get("events", []))
         result = {
-            "status": "success", "log_group": log_group, "count": len(events),
-            "events": [{
-                "timestamp": str(datetime.fromtimestamp(e["timestamp"] / 1000, tz=timezone.utc)),
-                "message": e["message"][:200],
-            } for e in sorted(events, key=lambda x: x["timestamp"], reverse=True)[:limit]],
+            "status": "success",
+            "log_group": log_group,
+            "count": len(events),
+            "events": [
+                {
+                    "timestamp": str(
+                        datetime.fromtimestamp(e["timestamp"] / 1000, tz=timezone.utc)
+                    ),
+                    "message": e["message"][:200],
+                }
+                for e in sorted(events, key=lambda x: x["timestamp"], reverse=True)[
+                    :limit
+                ]
+            ],
         }
-        _log(f"[TOOL] fetch_cloudwatch_logs group={log_group} pattern={filter_pattern!r} -> {len(events)} events")
+        _log(
+            f"[TOOL] fetch_cloudwatch_logs group={log_group} pattern={filter_pattern!r} -> {len(events)} events"
+        )
         return json.dumps(result, ensure_ascii=False, default=str)[:4000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -537,17 +691,24 @@ def fetch_rds_status(db_instance_identifier: str = "") -> str:
         instances = _rds().describe_db_instances(**kwargs).get("DBInstances", [])
         result = {
             "status": "success",
-            "instances": [{
-                "identifier": i["DBInstanceIdentifier"],
-                "status": i["DBInstanceStatus"],
-                "engine": f"{i['Engine']} {i['EngineVersion']}",
-                "instance_class": i["DBInstanceClass"],
-                "multi_az": i["MultiAZ"],
-                "endpoint": f"{i['Endpoint']['Address']}:{i['Endpoint']['Port']}" if i.get("Endpoint") else None,
-                "pending_changes": i.get("PendingModifiedValues", {}),
-            } for i in instances],
+            "instances": [
+                {
+                    "identifier": i["DBInstanceIdentifier"],
+                    "status": i["DBInstanceStatus"],
+                    "engine": f"{i['Engine']} {i['EngineVersion']}",
+                    "instance_class": i["DBInstanceClass"],
+                    "multi_az": i["MultiAZ"],
+                    "endpoint": f"{i['Endpoint']['Address']}:{i['Endpoint']['Port']}"
+                    if i.get("Endpoint")
+                    else None,
+                    "pending_changes": i.get("PendingModifiedValues", {}),
+                }
+                for i in instances
+            ],
         }
-        _log(f"[TOOL] fetch_rds_status db={db_instance_identifier or 'all'} -> {len(instances)} instances")
+        _log(
+            f"[TOOL] fetch_rds_status db={db_instance_identifier or 'all'} -> {len(instances)} instances"
+        )
         return json.dumps(result, ensure_ascii=False, default=str)[:3000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -559,19 +720,31 @@ def fetch_rds_events(db_instance_identifier: str = "", last_minutes: int = 60) -
     try:
         end_time = datetime.now(tz=timezone.utc)
         start_time = end_time - timedelta(minutes=last_minutes)
-        kwargs: Dict[str, Any] = {"StartTime": start_time, "EndTime": end_time, "SourceType": "db-instance"}
+        kwargs: Dict[str, Any] = {
+            "StartTime": start_time,
+            "EndTime": end_time,
+            "SourceType": "db-instance",
+        }
         if db_instance_identifier:
             kwargs["SourceIdentifier"] = db_instance_identifier
         events = _rds().describe_events(**kwargs).get("Events", [])
         result = {
-            "status": "success", "count": len(events),
-            "events": [{
-                "time": str(e.get("Date", "")),
-                "source": e.get("SourceIdentifier", ""),
-                "message": e.get("Message", ""),
-            } for e in sorted(events, key=lambda x: x.get("Date", ""), reverse=True)[:20]],
+            "status": "success",
+            "count": len(events),
+            "events": [
+                {
+                    "time": str(e.get("Date", "")),
+                    "source": e.get("SourceIdentifier", ""),
+                    "message": e.get("Message", ""),
+                }
+                for e in sorted(events, key=lambda x: x.get("Date", ""), reverse=True)[
+                    :20
+                ]
+            ],
         }
-        _log(f"[TOOL] fetch_rds_events db={db_instance_identifier or 'all'} last={last_minutes}m -> {len(events)} events")
+        _log(
+            f"[TOOL] fetch_rds_events db={db_instance_identifier or 'all'} last={last_minutes}m -> {len(events)} events"
+        )
         return json.dumps(result, ensure_ascii=False, default=str)[:3000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -585,11 +758,21 @@ def fetch_ec2_status(instance_ids: str = "", name_filter: str = "") -> str:
     """
     try:
         ec2 = _ec2()
-        ids = [i.strip() for i in instance_ids.split(",") if i.strip()] if instance_ids else []
-        filters = [{"Name": "tag:Name", "Values": [name_filter]}] if name_filter and not ids else []
+        ids = (
+            [i.strip() for i in instance_ids.split(",") if i.strip()]
+            if instance_ids
+            else []
+        )
+        filters = (
+            [{"Name": "tag:Name", "Values": [name_filter]}]
+            if name_filter and not ids
+            else []
+        )
         kwargs: Dict[str, Any] = {}
-        if ids: kwargs["InstanceIds"] = ids
-        if filters: kwargs["Filters"] = filters
+        if ids:
+            kwargs["InstanceIds"] = ids
+        if filters:
+            kwargs["Filters"] = filters
         resp = ec2.describe_instances(**kwargs)
 
         instance_ids_list = [
@@ -599,25 +782,39 @@ def fetch_ec2_status(instance_ids: str = "", name_filter: str = "") -> str:
         ]
         health_map: Dict[str, str] = {}
         if instance_ids_list:
-            for s in ec2.describe_instance_status(InstanceIds=instance_ids_list, IncludeAllInstances=True).get("InstanceStatuses", []):
-                health_map[s["InstanceId"]] = f"system={s['SystemStatus']['Status']} instance={s['InstanceStatus']['Status']}"
+            for s in ec2.describe_instance_status(
+                InstanceIds=instance_ids_list, IncludeAllInstances=True
+            ).get("InstanceStatuses", []):
+                health_map[s["InstanceId"]] = (
+                    f"system={s['SystemStatus']['Status']} instance={s['InstanceStatus']['Status']}"
+                )
 
         instances = []
         for r in resp.get("Reservations", []):
             for i in r.get("Instances", []):
-                name = next((t["Value"] for t in i.get("Tags", []) if t["Key"] == "Name"), "")
-                instances.append({
-                    "instance_id": i["InstanceId"], "name": name,
-                    "state": i["State"]["Name"],
-                    "health_check": health_map.get(i["InstanceId"], "unknown"),
-                    "instance_type": i["InstanceType"],
-                    "private_ip": i.get("PrivateIpAddress"),
-                    "public_ip": i.get("PublicIpAddress"),
-                    "launch_time": str(i.get("LaunchTime", "")),
-                    "security_groups": [{"id": sg["GroupId"], "name": sg["GroupName"]} for sg in i.get("SecurityGroups", [])],
-                })
+                name = next(
+                    (t["Value"] for t in i.get("Tags", []) if t["Key"] == "Name"), ""
+                )
+                instances.append(
+                    {
+                        "instance_id": i["InstanceId"],
+                        "name": name,
+                        "state": i["State"]["Name"],
+                        "health_check": health_map.get(i["InstanceId"], "unknown"),
+                        "instance_type": i["InstanceType"],
+                        "private_ip": i.get("PrivateIpAddress"),
+                        "public_ip": i.get("PublicIpAddress"),
+                        "launch_time": str(i.get("LaunchTime", "")),
+                        "security_groups": [
+                            {"id": sg["GroupId"], "name": sg["GroupName"]}
+                            for sg in i.get("SecurityGroups", [])
+                        ],
+                    }
+                )
         result = {"status": "success", "instances": instances}
-        _log(f"[TOOL] fetch_ec2_status filter={instance_ids or name_filter or 'all'} -> {len(instances)} instances")
+        _log(
+            f"[TOOL] fetch_ec2_status filter={instance_ids or name_filter or 'all'} -> {len(instances)} instances"
+        )
         return json.dumps(result, ensure_ascii=False, default=str)[:3000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -642,29 +839,49 @@ def fetch_cloudtrail_events(
         if event_names:
             for name in [n.strip() for n in event_names.split(",")]:
                 resp = _trail().lookup_events(
-                    LookupAttributes=[{"AttributeKey": "EventName", "AttributeValue": name}],
-                    StartTime=start_time, EndTime=end_time, MaxResults=10,
+                    LookupAttributes=[
+                        {"AttributeKey": "EventName", "AttributeValue": name}
+                    ],
+                    StartTime=start_time,
+                    EndTime=end_time,
+                    MaxResults=10,
                 )
                 all_events.extend(resp.get("Events", []))
         elif resource_name:
             resp = _trail().lookup_events(
-                LookupAttributes=[{"AttributeKey": "ResourceName", "AttributeValue": resource_name}],
-                StartTime=start_time, EndTime=end_time, MaxResults=20,
+                LookupAttributes=[
+                    {"AttributeKey": "ResourceName", "AttributeValue": resource_name}
+                ],
+                StartTime=start_time,
+                EndTime=end_time,
+                MaxResults=20,
             )
             all_events = resp.get("Events", [])
         else:
-            resp = _trail().lookup_events(StartTime=start_time, EndTime=end_time, MaxResults=20)
+            resp = _trail().lookup_events(
+                StartTime=start_time, EndTime=end_time, MaxResults=20
+            )
             all_events = resp.get("Events", [])
         result = {
-            "status": "success", "count": len(all_events),
-            "events": [{
-                "time": str(e.get("EventTime", "")),
-                "event_name": e.get("EventName", ""),
-                "username": e.get("Username", ""),
-                "resources": [r.get("ResourceName", "") for r in e.get("Resources", [])],
-            } for e in sorted(all_events, key=lambda x: x.get("EventTime", ""), reverse=True)[:20]],
+            "status": "success",
+            "count": len(all_events),
+            "events": [
+                {
+                    "time": str(e.get("EventTime", "")),
+                    "event_name": e.get("EventName", ""),
+                    "username": e.get("Username", ""),
+                    "resources": [
+                        r.get("ResourceName", "") for r in e.get("Resources", [])
+                    ],
+                }
+                for e in sorted(
+                    all_events, key=lambda x: x.get("EventTime", ""), reverse=True
+                )[:20]
+            ],
         }
-        _log(f"[TOOL] fetch_cloudtrail_events resource={resource_name!r} events={event_names!r} -> {len(all_events)} events")
+        _log(
+            f"[TOOL] fetch_cloudtrail_events resource={resource_name!r} events={event_names!r} -> {len(all_events)} events"
+        )
         return json.dumps(result, ensure_ascii=False, default=str)[:3000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -684,21 +901,38 @@ def fetch_elb_health(load_balancer_name: str = "", target_group_name: str = "") 
         lbs = elb.describe_load_balancers(**lb_kwargs).get("LoadBalancers", [])
         result_data: List[Dict] = []
         for lb in lbs[:5]:
-            for tg in elb.describe_target_groups(LoadBalancerArn=lb["LoadBalancerArn"]).get("TargetGroups", []):
-                if target_group_name and target_group_name.lower() not in tg["TargetGroupName"].lower():
+            for tg in elb.describe_target_groups(
+                LoadBalancerArn=lb["LoadBalancerArn"]
+            ).get("TargetGroups", []):
+                if (
+                    target_group_name
+                    and target_group_name.lower() not in tg["TargetGroupName"].lower()
+                ):
                     continue
                 health = elb.describe_target_health(TargetGroupArn=tg["TargetGroupArn"])
-                result_data.append({
-                    "lb_name": lb["LoadBalancerName"], "lb_state": lb["State"]["Code"],
-                    "tg_name": tg["TargetGroupName"],
-                    "targets": [{
-                        "id": t["Target"]["Id"],
-                        "health": t["TargetHealth"]["State"],
-                        "reason": t["TargetHealth"].get("Reason", ""),
-                    } for t in health.get("TargetHealthDescriptions", [])],
-                })
-        _log(f"[TOOL] fetch_elb_health lb={load_balancer_name!r} -> {len(result_data)} target groups")
-        return json.dumps({"status": "success", "load_balancers": result_data}, ensure_ascii=False, default=str)[:3000]
+                result_data.append(
+                    {
+                        "lb_name": lb["LoadBalancerName"],
+                        "lb_state": lb["State"]["Code"],
+                        "tg_name": tg["TargetGroupName"],
+                        "targets": [
+                            {
+                                "id": t["Target"]["Id"],
+                                "health": t["TargetHealth"]["State"],
+                                "reason": t["TargetHealth"].get("Reason", ""),
+                            }
+                            for t in health.get("TargetHealthDescriptions", [])
+                        ],
+                    }
+                )
+        _log(
+            f"[TOOL] fetch_elb_health lb={load_balancer_name!r} -> {len(result_data)} target groups"
+        )
+        return json.dumps(
+            {"status": "success", "load_balancers": result_data},
+            ensure_ascii=False,
+            default=str,
+        )[:3000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
 
@@ -712,23 +946,40 @@ def fetch_autoscaling_activity(asg_name: str = "", last_minutes: int = 60) -> st
         kwargs: Dict[str, Any] = {}
         if asg_name:
             kwargs["AutoScalingGroupName"] = asg_name
-        asgs = _asg().describe_auto_scaling_groups(**kwargs).get("AutoScalingGroups", [])
+        asgs = (
+            _asg().describe_auto_scaling_groups(**kwargs).get("AutoScalingGroups", [])
+        )
         all_activities: List[Dict] = []
         for asg in asgs[:5]:
-            acts = _asg().describe_scaling_activities(AutoScalingGroupName=asg["AutoScalingGroupName"], MaxRecords=20)
+            acts = _asg().describe_scaling_activities(
+                AutoScalingGroupName=asg["AutoScalingGroupName"], MaxRecords=20
+            )
             for a in acts.get("Activities", []):
                 if a.get("StartTime") and a["StartTime"] >= start_time:
-                    all_activities.append({
-                        "asg_name": asg["AutoScalingGroupName"],
-                        "desired": asg["DesiredCapacity"], "current": len(asg["Instances"]),
-                        "time": str(a.get("StartTime", "")),
-                        "cause": a.get("Cause", ""), "status": a.get("StatusCode", ""),
-                    })
-        _log(f"[TOOL] fetch_autoscaling_activity asg={asg_name or 'all'} -> {len(all_activities)} activities")
-        return json.dumps({
-            "status": "success", "asg_count": len(asgs),
-            "activities": sorted(all_activities, key=lambda x: x["time"], reverse=True)[:20],
-        }, ensure_ascii=False, default=str)[:3000]
+                    all_activities.append(
+                        {
+                            "asg_name": asg["AutoScalingGroupName"],
+                            "desired": asg["DesiredCapacity"],
+                            "current": len(asg["Instances"]),
+                            "time": str(a.get("StartTime", "")),
+                            "cause": a.get("Cause", ""),
+                            "status": a.get("StatusCode", ""),
+                        }
+                    )
+        _log(
+            f"[TOOL] fetch_autoscaling_activity asg={asg_name or 'all'} -> {len(all_activities)} activities"
+        )
+        return json.dumps(
+            {
+                "status": "success",
+                "asg_count": len(asgs),
+                "activities": sorted(
+                    all_activities, key=lambda x: x["time"], reverse=True
+                )[:20],
+            },
+            ensure_ascii=False,
+            default=str,
+        )[:3000]
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
 
@@ -841,7 +1092,9 @@ Conclude HEALTHY or UNHEALTHY with specific evidence. (max 1000 tokens)"""
 # Strands 모델
 # ============================================================
 _model = BedrockModel(
-    model_id=os.environ.get("ANALYSIS_MODEL_ID", "apac.anthropic.claude-sonnet-4-20250514-v1:0"),
+    model_id=os.environ.get(
+        "ANALYSIS_MODEL_ID", "apac.anthropic.claude-sonnet-4-20250514-v1:0"
+    ),
     region_name=AWS_REGION,
     streaming=False,
 )
@@ -871,9 +1124,14 @@ _infrastructure_agent_instance = Agent(
     model=_model,
     system_prompt=INFRASTRUCTURE_AGENT_PROMPT,
     tools=[
-        fetch_ec2_status, fetch_rds_status, fetch_rds_events,
-        fetch_cloudwatch_alarms, fetch_cloudtrail_events,
-        fetch_elb_health, fetch_autoscaling_activity, fetch_cloudwatch_metric,
+        fetch_ec2_status,
+        fetch_rds_status,
+        fetch_rds_events,
+        fetch_cloudwatch_alarms,
+        fetch_cloudtrail_events,
+        fetch_elb_health,
+        fetch_autoscaling_activity,
+        fetch_cloudwatch_metric,
     ],
     callback_handler=None,
 )
@@ -882,6 +1140,7 @@ _infrastructure_agent_instance = Agent(
 # ============================================================
 # Collector용 @tool 래퍼 (Collector Agent가 호출하는 Sub-agents)
 # ============================================================
+
 
 @tool
 def metrics_agent(query: str) -> str:
@@ -969,6 +1228,7 @@ def infrastructure_agent(query: str) -> str:
 # 챗봇 전용 툴
 # ============================================================
 
+
 @tool
 def search_incident_history(alert_name: str, query: str = "") -> str:
     """과거 인시던트 이력을 AgentCore Memory에서 검색합니다.
@@ -984,6 +1244,7 @@ def search_incident_history(alert_name: str, query: str = "") -> str:
     """
     try:
         from agentcore_memory import AgentCoreMemoryClient
+
         client = AgentCoreMemoryClient()
 
         result = {}
@@ -995,9 +1256,7 @@ def search_incident_history(alert_name: str, query: str = "") -> str:
 
         # 유사 인시던트
         similar = client.search_similar_incidents(
-            alert_name=alert_name,
-            error_message=query,
-            limit=5
+            alert_name=alert_name, error_message=query, limit=5
         )
         if similar:
             result["similar_incidents"] = similar
@@ -1032,15 +1291,20 @@ def get_ongoing_alarms() -> str:
 
         alarms = []
         for item in items:
-            alarms.append({
-                "alert_name": item.get("alert_name", {}).get("S", ""),
-                "severity": item.get("severity", {}).get("S", ""),
-                "started_at": item.get("started_at", {}).get("S", ""),
-                "root_cause": item.get("root_cause", {}).get("S", "분석 중"),
-            })
+            alarms.append(
+                {
+                    "alert_name": item.get("alert_name", {}).get("S", ""),
+                    "severity": item.get("severity", {}).get("S", ""),
+                    "started_at": item.get("started_at", {}).get("S", ""),
+                    "root_cause": item.get("root_cause", {}).get("S", "분석 중"),
+                }
+            )
 
-        return json.dumps({"ongoing_alarms": alarms, "count": len(alarms)},
-                          ensure_ascii=False, default=str)
+        return json.dumps(
+            {"ongoing_alarms": alarms, "count": len(alarms)},
+            ensure_ascii=False,
+            default=str,
+        )
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
 
@@ -1067,13 +1331,16 @@ def get_active_services() -> str:
         services = []
         for v in items:
             metric = v.get("metric", {})
-            services.append({
-                "job": metric.get("job", ""),
-                "environment": metric.get("deployment_environment", ""),
-            })
+            services.append(
+                {
+                    "job": metric.get("job", ""),
+                    "environment": metric.get("deployment_environment", ""),
+                }
+            )
 
-        return json.dumps({"active_services": services, "count": len(services)},
-                          ensure_ascii=False)
+        return json.dumps(
+            {"active_services": services, "count": len(services)}, ensure_ascii=False
+        )
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
 
@@ -1081,6 +1348,7 @@ def get_active_services() -> str:
 # ============================================================
 # Athena 헬퍼
 # ============================================================
+
 
 def _athena_run_query(sql: str, timeout_sec: int = 60) -> list[dict]:
     """Athena 쿼리 실행 후 결과를 딕셔너리 리스트로 반환"""
@@ -1160,12 +1428,14 @@ def query_historical_logs(
             end_date = today.strftime("%Y-%m-%d")
 
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt   = datetime.strptime(end_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
 
         limit = min(int(limit), 200)
 
         # 파티션 필터 생성 (deployment_environment 최상위 파티션 포함)
-        env_clause = f"deployment_environment = '{environment}' AND " if environment else ""
+        env_clause = (
+            f"deployment_environment = '{environment}' AND " if environment else ""
+        )
         partition_filter = (
             f"{env_clause}"
             f"(year > '{start_dt.year}' OR (year = '{start_dt.year}' AND month >= '{start_dt.month:02d}')) "
@@ -1183,9 +1453,13 @@ def query_historical_logs(
             extra_conditions.append(f"upper(lr.severitytext) = upper('{severity}')")
         if keyword:
             safe_kw = keyword.replace("'", "''")
-            extra_conditions.append(f"lower(lr.body.stringvalue) LIKE lower('%{safe_kw}%')")
+            extra_conditions.append(
+                f"lower(lr.body.stringvalue) LIKE lower('%{safe_kw}%')"
+            )
 
-        extra_where = ("AND " + " AND ".join(extra_conditions)) if extra_conditions else ""
+        extra_where = (
+            ("AND " + " AND ".join(extra_conditions)) if extra_conditions else ""
+        )
 
         sql = f"""
 SELECT
@@ -1211,13 +1485,22 @@ LIMIT {limit}
         rows = _athena_run_query(sql.strip())
 
         if not rows:
-            return json.dumps({"message": "조건에 맞는 로그 없음", "query_range": f"{start_date} ~ {end_date}"})
+            return json.dumps(
+                {
+                    "message": "조건에 맞는 로그 없음",
+                    "query_range": f"{start_date} ~ {end_date}",
+                }
+            )
 
-        return json.dumps({
-            "total": len(rows),
-            "query_range": f"{start_date} ~ {end_date}",
-            "logs": rows,
-        }, ensure_ascii=False, default=str)
+        return json.dumps(
+            {
+                "total": len(rows),
+                "query_range": f"{start_date} ~ {end_date}",
+                "logs": rows,
+            },
+            ensure_ascii=False,
+            default=str,
+        )
 
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -1257,11 +1540,13 @@ def query_historical_traces(
             end_date = today.strftime("%Y-%m-%d")
 
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt   = datetime.strptime(end_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
 
         limit = min(int(limit), 200)
 
-        env_clause = f"deployment_environment = '{environment}' AND " if environment else ""
+        env_clause = (
+            f"deployment_environment = '{environment}' AND " if environment else ""
+        )
         partition_filter = (
             f"{env_clause}"
             f"(year > '{start_dt.year}' OR (year = '{start_dt.year}' AND month >= '{start_dt.month:02d}')) "
@@ -1273,7 +1558,9 @@ def query_historical_traces(
         extra_conditions = []
         if service_name:
             safe_svc = service_name.replace("'", "''")
-            extra_conditions.append(f"lower({svc_expr_trace}) LIKE lower('%{safe_svc}%')")
+            extra_conditions.append(
+                f"lower({svc_expr_trace}) LIKE lower('%{safe_svc}%')"
+            )
         if status_code:
             extra_conditions.append(
                 f"element_at(transform(filter(sp.attributes, x -> x.key = 'http.status_code'), "
@@ -1285,7 +1572,9 @@ def query_historical_traces(
                 f"(cast(sp.endtimeunixnano AS bigint) - cast(sp.starttimeunixnano AS bigint)) >= {min_ns}"
             )
 
-        extra_where = ("AND " + " AND ".join(extra_conditions)) if extra_conditions else ""
+        extra_where = (
+            ("AND " + " AND ".join(extra_conditions)) if extra_conditions else ""
+        )
 
         sql = f"""
 SELECT
@@ -1319,13 +1608,22 @@ LIMIT {limit}
         rows = _athena_run_query(sql.strip())
 
         if not rows:
-            return json.dumps({"message": "조건에 맞는 트레이스 없음", "query_range": f"{start_date} ~ {end_date}"})
+            return json.dumps(
+                {
+                    "message": "조건에 맞는 트레이스 없음",
+                    "query_range": f"{start_date} ~ {end_date}",
+                }
+            )
 
-        return json.dumps({
-            "total": len(rows),
-            "query_range": f"{start_date} ~ {end_date}",
-            "traces": rows,
-        }, ensure_ascii=False, default=str)
+        return json.dumps(
+            {
+                "total": len(rows),
+                "query_range": f"{start_date} ~ {end_date}",
+                "traces": rows,
+            },
+            ensure_ascii=False,
+            default=str,
+        )
 
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -1357,9 +1655,11 @@ def query_log_error_summary(
             end_date = today.strftime("%Y-%m-%d")
 
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt   = datetime.strptime(end_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
 
-        env_clause = f"deployment_environment = '{environment}' AND " if environment else ""
+        env_clause = (
+            f"deployment_environment = '{environment}' AND " if environment else ""
+        )
         partition_filter = (
             f"{env_clause}"
             f"(year > '{start_dt.year}' OR (year = '{start_dt.year}' AND month >= '{start_dt.month:02d}')) "
@@ -1391,12 +1691,21 @@ LIMIT 200
         rows = _athena_run_query(sql.strip())
 
         if not rows:
-            return json.dumps({"message": "해당 기간 ERROR/WARN 로그 없음", "query_range": f"{start_date} ~ {end_date}"})
+            return json.dumps(
+                {
+                    "message": "해당 기간 ERROR/WARN 로그 없음",
+                    "query_range": f"{start_date} ~ {end_date}",
+                }
+            )
 
-        return json.dumps({
-            "query_range": f"{start_date} ~ {end_date}",
-            "summary": rows,
-        }, ensure_ascii=False, default=str)
+        return json.dumps(
+            {
+                "query_range": f"{start_date} ~ {end_date}",
+                "summary": rows,
+            },
+            ensure_ascii=False,
+            default=str,
+        )
 
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})

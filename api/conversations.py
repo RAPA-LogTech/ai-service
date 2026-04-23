@@ -31,6 +31,7 @@ def get_conversation(cid: str):
 @router.delete("/v1/conversations/{cid}")
 def delete_conversation(cid: str):
     from chat import agent
+
     db.delete_conversation(cid)
     agent.delete_session(cid)
     return {"ok": True}

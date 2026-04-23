@@ -16,8 +16,8 @@ CONVERSATIONS_TABLE = os.environ.get("CHATBOT_CONVERSATIONS_TABLE", "")
 MESSAGES_TABLE = os.environ.get("CHATBOT_MESSAGES_TABLE", "")
 
 # 요약 전략 설정
-SUMMARY_THRESHOLD = 40   # 비요약 메시지가 이 수를 초과하면 요약 생성
-RECENT_TURNS = 20        # 요약 후 최근 몇 턴을 보존
+SUMMARY_THRESHOLD = 40  # 비요약 메시지가 이 수를 초과하면 요약 생성
+RECENT_TURNS = 20  # 요약 후 최근 몇 턴을 보존
 
 _dynamodb = None
 
@@ -43,6 +43,7 @@ def init_db():
 
 # ── Conversations ──────────────────────────────────────────────
 
+
 def list_conversations() -> list[dict]:
     resp = _conv_table().scan()
     items = resp.get("Items", [])
@@ -56,13 +57,19 @@ def list_conversations() -> list[dict]:
 def create_conversation(first_message: str = "") -> dict:
     now = datetime.now(timezone.utc).isoformat()
     cid = str(uuid.uuid4())
-    title = first_message[:40] + "..." if len(first_message) > 40 else first_message or "새 대화"
-    _conv_table().put_item(Item={
-        "conversation_id": cid,
-        "title": title,
-        "created_at": now,
-        "updated_at": now,
-    })
+    title = (
+        first_message[:40] + "..."
+        if len(first_message) > 40
+        else first_message or "새 대화"
+    )
+    _conv_table().put_item(
+        Item={
+            "conversation_id": cid,
+            "title": title,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
     return {"id": cid, "title": title, "created_at": now, "updated_at": now}
 
 
@@ -84,10 +91,12 @@ def delete_conversation(cid: str):
         resp = table.query(**kwargs)
         with table.batch_writer() as batch:
             for item in resp.get("Items", []):
-                batch.delete_item(Key={
-                    "conversation_id": cid,
-                    "message_id": item["message_id"],
-                })
+                batch.delete_item(
+                    Key={
+                        "conversation_id": cid,
+                        "message_id": item["message_id"],
+                    }
+                )
         last_key = resp.get("LastEvaluatedKey")
         if not last_key:
             break
@@ -113,6 +122,7 @@ def _touch_conversation(cid: str):
 
 # ── Messages ───────────────────────────────────────────────────
 
+
 def get_messages(cid: str) -> list[dict]:
     """UI 표시용 전체 메시지 (요약 제외)"""
     resp = _msg_table().query(KeyConditionExpression=Key("conversation_id").eq(cid))
@@ -128,7 +138,7 @@ def get_context_messages(cid: str) -> list[dict]:
 
     summary = next((i for i in reversed(items) if i.get("is_summary")), None)
     non_summary = [i for i in items if not i.get("is_summary")]
-    recent = non_summary[-(RECENT_TURNS * 2):]
+    recent = non_summary[-(RECENT_TURNS * 2) :]
 
     result = []
     if summary:
@@ -140,16 +150,24 @@ def get_context_messages(cid: str) -> list[dict]:
 def add_message(cid: str, role: str, content: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
     mid = str(uuid.uuid4())
-    _msg_table().put_item(Item={
+    _msg_table().put_item(
+        Item={
+            "conversation_id": cid,
+            "message_id": mid,
+            "role": role,
+            "content": content,
+            "created_at": now,
+            "is_summary": False,
+        }
+    )
+    _touch_conversation(cid)
+    return {
+        "id": mid,
         "conversation_id": cid,
-        "message_id": mid,
         "role": role,
         "content": content,
         "created_at": now,
-        "is_summary": False,
-    })
-    _touch_conversation(cid)
-    return {"id": mid, "conversation_id": cid, "role": role, "content": content, "created_at": now}
+    }
 
 
 def add_summary(cid: str, content: str):
@@ -160,20 +178,24 @@ def add_summary(cid: str, content: str):
     with table.batch_writer() as batch:
         for item in resp.get("Items", []):
             if item.get("is_summary"):
-                batch.delete_item(Key={
-                    "conversation_id": cid,
-                    "message_id": item["message_id"],
-                })
+                batch.delete_item(
+                    Key={
+                        "conversation_id": cid,
+                        "message_id": item["message_id"],
+                    }
+                )
     # 새 요약 저장 (created_at을 최초 메시지 시각으로 설정해 정렬 시 맨 앞에 오도록)
     now = datetime.now(timezone.utc).isoformat()
-    table.put_item(Item={
-        "conversation_id": cid,
-        "message_id": str(uuid.uuid4()),
-        "role": "user",
-        "content": f"[이전 대화 요약]\n{content}",
-        "created_at": "0000-" + now[5:],  # 항상 가장 앞에 정렬
-        "is_summary": True,
-    })
+    table.put_item(
+        Item={
+            "conversation_id": cid,
+            "message_id": str(uuid.uuid4()),
+            "role": "user",
+            "content": f"[이전 대화 요약]\n{content}",
+            "created_at": "0000-" + now[5:],  # 항상 가장 앞에 정렬
+            "is_summary": True,
+        }
+    )
 
 
 def count_non_summary_messages(cid: str) -> int:

@@ -88,7 +88,9 @@ SYSTEM_PROMPT = """당신은 LogTech의 AI 어시스턴트입니다.
 """
 
 AWS_REGION = os.environ.get("AWS_REGION_NAME", "ap-northeast-2")
-BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-3-5-haiku-20241022-v1:0")
+BEDROCK_MODEL_ID = os.environ.get(
+    "BEDROCK_MODEL_ID", "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+)
 AGENTCORE_MEMORY_ID = os.environ.get("AGENTCORE_MEMORY_ID", "")
 
 # 세션별 Agent 인스턴스 캐시 (in-process 캐싱)
@@ -156,14 +158,20 @@ def _generate_summary(messages: list[dict]) -> str:
     )
     response = bedrock.converse(
         modelId=BEDROCK_MODEL_ID,
-        messages=[{
-            "role": "user",
-            "content": [{"text": (
-                "다음 대화를 간결하게 요약해주세요. "
-                "주요 질문, 조회한 데이터, 발견된 이슈, 핵심 수치를 포함하세요:\n\n"
-                + conversation_text
-            )}],
-        }],
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "text": (
+                            "다음 대화를 간결하게 요약해주세요. "
+                            "주요 질문, 조회한 데이터, 발견된 이슈, 핵심 수치를 포함하세요:\n\n"
+                            + conversation_text
+                        )
+                    }
+                ],
+            }
+        ],
         inferenceConfig={"maxTokens": 800},
     )
     return response["output"]["message"]["content"][0]["text"]
@@ -177,10 +185,9 @@ def _maybe_summarize(conversation_id: str) -> None:
 
     # 요약 대상: 최근 RECENT_TURNS*2 개 이전 메시지
     all_messages = [
-        m for m in db.get_messages(conversation_id)
-        if not m.get("is_summary")
+        m for m in db.get_messages(conversation_id) if not m.get("is_summary")
     ]
-    to_summarize = all_messages[:-(db.RECENT_TURNS * 2)]
+    to_summarize = all_messages[: -(db.RECENT_TURNS * 2)]
     if not to_summarize:
         return
 
